@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Screen Share Viewer</title>
+
+<link rel="stylesheet" href="src/style.css">
+</head>
+<body>
+
+<div class="container">
+
+    <h1>共有一覧</h1>
+
+    <button id="refreshBtn">
+        更新
+    </button>
+
+    <div id="shareList"></div>
+
+    <hr>
+
+    <div id="selectedName">
+        未選択
+    </div>
+
+    <input
+        type="password"
+        id="viewPassword"
+        placeholder="パスワード"
+    >
+
+    <button id="watchBtn">
+        視聴開始
+    </button>
+
+    <video
+        id="remoteVideo"
+        autoplay
+        playsinline
+        controls
+    ></video>
+
+    <div id="status">
+        未接続
+    </div>
+
+</div>
+
+<script>
+window.APP_MODE="view";
+</script>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="src/client.js"></script>
+
+</body>
+</html>
