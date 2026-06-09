@@ -15,6 +15,8 @@ const PORT = process.env.PORT || 3000;
 
 const shares = new Map();
 
+const disconnectTimers = new Map();
+
 app.use("/src", express.static("src"));
 
 app.get("/", (req, res) => {
@@ -27,27 +29,56 @@ app.get("/admin", (req, res) => {
 
 io.on("connection", socket => {
 
-    socket.on("share-start", data => {
+   socket.on("share-start", data => {
 
-        shares.set(data.name, {
-            name: data.name,
-            password: data.password || "",
-            ownerSocketId: socket.id
-        });
+    const timer =
+        disconnectTimers.get(data.name);
 
-        socket.join(data.name);
+    if(timer){
 
+        clearTimeout(timer);
+
+        disconnectTimers.delete(
+            data.name
+        );
+
+    }
+
+    shares.set(data.name, {
+        name: data.name,
+        password: data.password || "",
+        ownerSocketId: socket.id
     });
+
+    socket.join(data.name);
+
+});
 
     socket.on("share-stop", data => {
 
-        shares.delete(data.room);
+    const timer =
+        disconnectTimers.get(
+            data.room
+        );
 
-        io.to(data.room).emit(
+    if(timer){
+
+        clearTimeout(timer);
+
+        disconnectTimers.delete(
+            data.room
+        );
+
+    }
+
+    shares.delete(data.room);
+
+    io.to(data.room)
+        .emit(
             "share-ended"
         );
 
-    });
+});
 
     socket.on("get-shares", () => {
 
@@ -143,28 +174,53 @@ io.on("connection", socket => {
 
     socket.on("disconnect", () => {
 
-        for(
-            const [name, room]
-            of shares.entries()
+    for(
+        const [name, room]
+        of shares.entries()
+    ){
+
+        if(
+            room.ownerSocketId ===
+            socket.id
         ){
 
-            if(
-                room.ownerSocketId ===
-                socket.id
-            ){
+            const timer =
+                setTimeout(() => {
 
-                shares.delete(name);
+                    const currentRoom =
+                        shares.get(name);
 
-                io.to(name)
-                    .emit(
-                        "share-ended"
+                    if(
+                        currentRoom &&
+                        currentRoom.ownerSocketId ===
+                        socket.id
+                    ){
+
+                        shares.delete(name);
+
+                        io.to(name)
+                            .emit(
+                                "share-ended"
+                            );
+
+                    }
+
+                    disconnectTimers.delete(
+                        name
                     );
 
-            }
+                }, 30000);
+
+            disconnectTimers.set(
+                name,
+                timer
+            );
 
         }
 
-    });
+    }
+
+});
 
 });
 
