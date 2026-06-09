@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Screen Share Sender</title>
+
+<link rel="stylesheet" href="src/style.css">
+</head>
+<body>
+
+<div class="container">
+
+    <h1>画面共有</h1>
+
+    <input
+        type="text"
+        id="shareName"
+        placeholder="名前"
+    >
+
+    <input
+        type="password"
+        id="sharePassword"
+        placeholder="パスワード(任意)"
+    >
+
+    <button id="shareBtn">
+        共有開始
+    </button>
+
+    <button
+        id="stopShareBtn"
+        disabled
+    >
+        共有停止
+    </button>
+
+    <video
+        id="localVideo"
+        autoplay
+        muted
+        playsinline
+    ></video>
+
+    <div id="status">
+        未共有
+    </div>
+
+</div>
+
+<script>
+window.APP_MODE="share";
+</script>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="src/client.js"></script>
+
+</body>
+</html>
