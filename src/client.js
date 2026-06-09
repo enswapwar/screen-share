@@ -327,6 +327,14 @@ socket.on("auth-failed", () => {
 
 });
 
+socket.on("share-ended", () => {
+
+    alert("共有が終了しました");
+
+    location.reload();
+
+});
+
 socket.on("share-not-found", () => {
 
     alert("共有が見つかりません");
