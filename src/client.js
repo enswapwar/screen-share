@@ -1,10 +1,21 @@
-const socket = io();
+const socket = io({
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000
+});
 
 let localStream = null;
 let peerConnection = null;
 
 let selectedShare = null;
 let currentRoom = null;
+
+let shareName = "";
+let sharePassword = "";
+
+let lastViewedRoom = null;
+let lastViewedPassword = "";
 
 const statusEl = document.getElementById("status");
 
@@ -23,33 +34,49 @@ function setStatus(text){
 }
 
 function createPeer(){
+
+    if(peerConnection){
+        peerConnection.close();
+    }
+
     peerConnection = new RTCPeerConnection(rtcConfig);
 
     peerConnection.onicecandidate = event => {
+
         if(event.candidate){
+
             socket.emit("ice-candidate", {
                 room: currentRoom,
                 candidate: event.candidate
             });
+
         }
+
     };
 
     peerConnection.ontrack = event => {
-        const remoteVideo = document.getElementById("remoteVideo");
+
+        const remoteVideo =
+            document.getElementById("remoteVideo");
 
         if(remoteVideo){
-            remoteVideo.srcObject = event.streams[0];
+            remoteVideo.srcObject =
+                event.streams[0];
         }
+
     };
 
     peerConnection.onconnectionstatechange = () => {
+
         setStatus(
             "接続状態: " +
             peerConnection.connectionState
         );
+
     };
 
     return peerConnection;
+
 }
 
 if(window.APP_MODE === "share"){
@@ -68,23 +95,48 @@ if(window.APP_MODE === "share"){
             document.getElementById("sharePassword")
             .value;
 
-        if(!name){
-            alert("名前を入力してください");
-            return;
-        }
+if(!name){
+
+    alert("名前を入力してください");
+    return;
+
+}
+
+shareName = name;
+sharePassword = password;
 
         try{
 
-            localStream =
-                await navigator.mediaDevices
-                .getDisplayMedia({
-                    video:true,
-                    audio:true
+    localStream =
+        await navigator.mediaDevices
+        .getDisplayMedia({
+            video:true,
+            audio:true
+        });
+
+    const videoTrack =
+        localStream.getVideoTracks()[0];
+
+    if(videoTrack){
+
+        videoTrack.addEventListener(
+            "ended",
+            () => {
+
+                socket.emit("share-stop", {
+                    room:name
                 });
 
-            document
-                .getElementById("localVideo")
-                .srcObject = localStream;
+                location.reload();
+
+            }
+        );
+
+    }
+
+    document
+        .getElementById("localVideo")
+        .srcObject = localStream;
 
             currentRoom = name;
 
@@ -97,17 +149,6 @@ if(window.APP_MODE === "share"){
             stopBtn.disabled = false;
 
             setStatus("共有中");
-
-            localStream
-                .getVideoTracks()[0]
-                .addEventListener("ended", () => {
-
-                    socket.emit("share-stop", {
-                        room:name
-                    });
-
-                    location.reload();
-                });
 
         }catch(err){
 
@@ -138,32 +179,48 @@ if(window.APP_MODE === "share"){
 
     socket.on("viewer-joined", async () => {
 
-        createPeer();
+    if(!localStream){
+        return;
+    }
 
-        localStream.getTracks().forEach(track => {
+    if(peerConnection){
+
+        peerConnection.close();
+        peerConnection = null;
+
+    }
+
+    createPeer();
+
+    localStream
+        .getTracks()
+        .forEach(track => {
+
             peerConnection.addTrack(
                 track,
                 localStream
             );
+
         });
 
-        const offer =
-            await peerConnection.createOffer();
+    const offer =
+        await peerConnection.createOffer();
 
-        await peerConnection.setLocalDescription(
-            offer
-        );
+    await peerConnection.setLocalDescription(
+        offer
+    );
 
-        socket.emit("offer", {
-            room: currentRoom,
-            offer
-        });
-
+    socket.emit("offer", {
+        room: currentRoom,
+        offer
     });
+
+});
 
 }
 
 if(window.APP_MODE === "view"){
+
 
     const shareList =
         document.getElementById("shareList");
@@ -237,6 +294,15 @@ if(window.APP_MODE === "view"){
                 return;
             }
 
+            lastViewedRoom = selectedShare;
+
+    lastViewedPassword =
+        document
+        .getElementById(
+            "viewPassword"
+        )
+        .value;
+            
             currentRoom = selectedShare;
 
             socket.emit("viewer-join", {
@@ -260,6 +326,13 @@ socket.on("offer", async data => {
 
     if(window.APP_MODE !== "view"){
         return;
+    }
+
+    if(peerConnection){
+
+        peerConnection.close();
+        peerConnection = null;
+
     }
 
     createPeer();
@@ -290,12 +363,28 @@ socket.on("answer", async data => {
         return;
     }
 
-    await peerConnection
-        .setRemoteDescription(
+    if(!peerConnection){
+        return;
+    }
+
+    try{
+
+        await peerConnection.setRemoteDescription(
             new RTCSessionDescription(
                 data.answer
             )
         );
+
+    }catch(err){
+
+        console.error(
+            "answer処理失敗",
+            err
+        );
+        alert(
+            "エラーが発生しました、consoleを参照してください。"
+        )
+    }
 
 });
 
@@ -332,6 +421,54 @@ socket.on("share-ended", () => {
     alert("共有が終了しました");
 
     location.reload();
+
+});
+
+
+socket.on("disconnect", reason => {
+
+    if(window.APP_MODE === "share"){
+
+        setStatus(
+            "通信切断...: " + reason
+        );
+
+    }
+
+});
+
+socket.on("reconnect", () => {
+
+    if(
+        window.APP_MODE === "share" &&
+        localStream &&
+        shareName
+    ){
+
+        setStatus("再接続中...");
+
+        socket.emit("share-start", {
+            name: shareName,
+            password: sharePassword
+        });
+
+        setStatus("再接続成功");
+
+    }
+
+    if(
+        window.APP_MODE === "view" &&
+        lastViewedRoom
+    ){
+
+        setStatus("再接続中...");
+
+        socket.emit("viewer-join", {
+            room: lastViewedRoom,
+            password: lastViewedPassword
+        });
+
+    }
 
 });
 
